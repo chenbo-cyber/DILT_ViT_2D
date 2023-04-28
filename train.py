@@ -25,20 +25,22 @@ def set_module(args):
     Create module
     """
     net = None
-    b = np.linspace(0.015, 1.5, 100)[:, np.newaxis]
-    t = np.linspace(0.015, 1.5, 100)[:, np.newaxis]
+    b = np.linspace(0.03, 3, 100)[:, np.newaxis]
+    t = np.linspace(0.03, 3, 100)[:, np.newaxis]
     if args.module_type == 'EANet':
         net = EANet(n_classes=1, n_layers=50, stride=8, b_values=b, t_values=t, DEVICE=DEVICE)
     elif args.module_type == 'SimpleViT':
         net = SimpleViT(
-                        image_size = 100,
-                        patch_size = 10,
+                        image_size = args.image_size,
+                        patch_size = args.patch_size,
+                        # image_size = 100,
+                        # patch_size = 10,
                         num_classes = 10000,
                         dim = 1024,
-                        # depth = args.n_layers,
-                        # heads = args.n_heads,
-                        depth = 10,
-                        heads = 10,
+                        depth = args.n_layers,
+                        heads = args.n_heads,
+                        # depth = 10,
+                        # heads = 10,
                         mlp_dim = 2048,
                         b_values=b, 
                         t_values=t, 
@@ -101,22 +103,11 @@ def train(args, module, optimizer, criterion, scheduler, train_loader, val_loade
             train_input, train_label = train_input.to(DEVICE), train_label.to(DEVICE)
         optimizer.zero_grad()
         out_input, out_result, out_lambda = module(train_input)
-        # out_lambda = out_lambda.to(DEVICE)
-        # loss = criterion(train_input, out_input) + 0.01 * criterion(train_label, out_result)
-        # loss_input = torch.sum(out_lambda[:, 0][:, np.newaxis, np.newaxis] * torch.pow(((train_input) - (out_input)),2)).to(torch.float32)
-        # loss_label = torch.sum(out_lambda[:, 1][:, np.newaxis, np.newaxis] * torch.pow(((train_label) - (out_result)),2)).to(torch.float32)
-        # loss = loss_input + loss_label
-        # loss_label = torch.sum(torch.exp(-train_lambda[:, 1]) * torch.sum(torch.pow(((train_label) - (out_result)),2).reshape(args.batch_size, -1), dim=1)).to(torch.float32)
-        # loss_l1 = torch.sum(1 * torch.norm(out_result.reshape(args.batch_size, -1), p=1, dim=1)).to(torch.float32)
-        # loss = criterion(train_input, out_input)
-        # loss = criterion(train_input, out_input) + 0.001 * criterion(train_label, out_result) + 0.1 * loss_l1
-        if epoch < 200:
-            loss = criterion(train_label, out_result)
-        else:
-            loss = 100 * criterion(train_input, out_input) + criterion(train_label, out_result)
-        # loss_label = out_lambda[:, 0] * torch.sum(torch.pow(out_input - train_input, 2).reshape(args.batch_size, -1), dim=1)
-        # loss_l1 = out_lambda[:, 1] * torch.norm(out_result, p=1, dim=1)
-        # loss = torch.sum(loss_label + loss_l1).to(torch.float32)
+
+        loss_label = criterion(train_label, out_result)
+        loss_decay = criterion(train_input, out_input)
+        loss = args.reg_lambda * loss_label + loss_decay
+        # loss = loss_label
         loss.backward()
         optimizer.step()
         loss_train += loss.data.item()
@@ -125,29 +116,27 @@ def train(args, module, optimizer, criterion, scheduler, train_loader, val_loade
 
     module.eval()
     loss_val = 0
+    loss_val_label = 0
+    loss_val_decay = 0
     for batch_idx, (val_input, val_label) in enumerate(val_loader):
         if args.use_cuda:
             val_input, val_label = val_input.to(DEVICE), val_label.to(DEVICE)
         with torch.no_grad():
             val_out, val_result, val_lambda = module(val_input)
             # val_lambda = val_lambda.to(DEVICE)
-        # loss_input = torch.sum(val_lambda[:, 0][:, np.newaxis, np.newaxis] * torch.pow(((val_out) - (val_input)),2)).to(torch.float32)
-        # loss_label = torch.sum(val_lambda[:, 1][:, np.newaxis, np.newaxis] * torch.pow(((val_reslt) - (val_label)),2)).to(torch.float32)
-        # loss = loss_input + loss_label
-        # loss_label = torch.sum(0.025 * torch.pow(((val_result) - (val_label)),2)).to(torch.float32)
-        # loss_l1 = torch.sum(1 * torch.norm(val_result.reshape(args.batch_size, -1), p=1, dim=1).unsqueeze(1)).to(torch.float32)
-        # loss = criterion(val_out, val_input)
-        # loss = criterion(val_out, val_input) + 0.001*criterion(val_label, val_result) + 0.1 * loss_l1
-        if epoch < 200:
-            loss = criterion(val_label, val_result)
-        else:
-            loss = 100 * criterion(val_out, val_input) + criterion(val_label, val_result)
-        # loss_label = val_lambda[:, 0] * torch.sum(torch.pow(val_out - val_input, 2).reshape(args.batch_size, -1), dim=1)
-        # loss_l1 = val_lambda[:, 1] * torch.norm(val_result, p=1, dim=1)
-        # loss = torch.sum(loss_label + loss_l1).to(torch.float32)
+        loss_label = criterion(val_label, val_result)
+        loss_decay = criterion(val_out, val_input)
+        loss = args.reg_lambda * loss_label + loss_decay
+        # loss = loss_label
+
         loss_val += loss.data.item()
+        loss_val_decay += loss_decay.data.item()
+        loss_val_label += loss_label.data.item()
+
     loss_train /= args.n_training
     loss_val /= args.n_validation
+    loss_val_decay /= args.n_validation
+    loss_val_label /= args.n_validation
     scheduler.step(loss_val)
 
     if epoch % args.test_epoch == 0 or epoch == args.n_epochs:
@@ -185,8 +174,8 @@ def train(args, module, optimizer, criterion, scheduler, train_loader, val_loade
             plt.savefig(os.path.join(save_result_path, 'data{}_contour'.format(str(batch_idx))))
 
 
-    logger.info("Epochs: %d / %d, Time: %.1f, Training L2 loss: %.3f, Validation L2 loss: %.3f",
-                epoch, args.n_epochs, time.time() - epoch_start_time, loss_train, loss_val)
+    logger.info("Epochs: %d / %d, Time: %.1f, Training loss: %.3f, Validation loss: %.3f, Validation label loss: %.3f, Validation decay loss: %.3f",
+                epoch, args.n_epochs, time.time() - epoch_start_time, loss_train, loss_val, loss_val_label, loss_val_decay)
 
     return loss_train, loss_val
 
@@ -194,21 +183,25 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # basic parameters
+    parser.add_argument('--tag', type=str, default='', help='the tag for training model')
     parser.add_argument('--output_dir', type=str, default='./Experiments', help='output directory')
     parser.add_argument('--no_cuda', action='store_true', help="avoid using CUDA when available")
     # dataset parameters
-    parser.add_argument('--batch_size', type=int, default=200, help='batch size used during training')
+    parser.add_argument('--batch_size', type=int, default=100, help='batch size used during training')
     #module parameters
     parser.add_argument('--module_type', type=str, default='SimpleViT', help='type of the module')
     parser.add_argument('--n_layers', type=int, default=10, help='number of feed forward layers in the module')
     parser.add_argument('--n_heads', type=int, default=10, help='head number of multi-head attention in the module')
+    parser.add_argument('--patch_size', type=int, default=20, help='head number of multi-head attention in the module')
+    parser.add_argument('--image_size', type=int, default=100, help='head number of multi-head attention in the module')
     # training parameters
+    parser.add_argument('--reg_lambda', type=float, default=0.1, help='the regularization parameter')
     parser.add_argument('--n_training', type=int, default=80000*0.9, help='# of training data')
     parser.add_argument('--n_validation', type=int, default=80000*0.1, help='# of validation data')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='initial learning rate for adam optimizer used for the module')
-    parser.add_argument('--n_epochs', type=int, default=200, help='number of epochs used to train the module')
-    parser.add_argument('--save_epoch', type=int, default=1, help='saving checkpoints at the end of epochs')
+    parser.add_argument('--n_epochs', type=int, default=300, help='number of epochs used to train the module')
+    parser.add_argument('--save_epoch', type=int, default=5, help='saving checkpoints at the end of epochs')
     parser.add_argument('--test_epoch', type=int, default=5, help='test result at the end of epochs')
     parser.add_argument('--numpy_seed', type=int, default=100)
     parser.add_argument('--torch_seed', type=int, default=76)
