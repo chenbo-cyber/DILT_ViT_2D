@@ -49,7 +49,9 @@ def generate_dataset(args):
 
     print('##############################finished##############################')
 
-def load_dataloader_exist(batch_size):
+def load_dataloader_exist(batch_size, device):
+    DEVICE = torch.device("cpu")
+
     train_input = np.load("./Dataset/train_input.npy")
     train_label = np.load("./Dataset/train_label.npy")
     val_input = np.load("./Dataset/val_input.npy")
@@ -57,21 +59,21 @@ def load_dataloader_exist(batch_size):
     test_input = np.load("./Dataset/test_input.npy")
     test_label = np.load("./Dataset/test_label.npy")
 
-    train_input = torch.from_numpy(train_input).float()
-    val_input = torch.from_numpy(val_input).float()
-    test_input = torch.from_numpy(test_input).float()
-    train_label = torch.from_numpy(train_label).float()
-    val_label = torch.from_numpy(val_label).float()
-    test_label = torch.from_numpy(test_label).float()
+    train_input = torch.from_numpy(train_input).float().to(DEVICE)
+    val_input = torch.from_numpy(val_input).float().to(DEVICE)
+    test_input = torch.from_numpy(test_input).float().to(DEVICE)
+    train_label = torch.from_numpy(train_label).float().to(DEVICE)
+    val_label = torch.from_numpy(val_label).float().to(DEVICE)
+    test_label = torch.from_numpy(test_label).float().to(DEVICE)
 
     train_dataset = torch.utils.data.TensorDataset(train_input, train_label)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, num_workers=40, shuffle=True)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, num_workers=2, shuffle=True)
 
     val_dataset = torch.utils.data.TensorDataset(val_input, val_label)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, num_workers=40, shuffle=False)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, num_workers=2, shuffle=False)
 
     test_dataset = torch.utils.data.TensorDataset(test_input, test_label)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, num_workers=40, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, num_workers=2, shuffle=False)
 
     return train_loader, val_loader, test_loader
 
@@ -92,6 +94,8 @@ def gen_signal(args):
     label = np.zeros([args.num_samples, args.label_dim, args.label_dim])
     b = np.linspace(args.max_b / args.input_dim, args.max_b, args.input_dim)
     t = np.linspace(args.max_t / args.input_dim, args.max_t, args.input_dim)
+    # b = scio.loadmat('Dataset/T2-T2_mt50ms.mat')['t2values']
+    # t = scio.loadmat('Dataset/T2-T2_mt50ms.mat')['t2values']
     if args.axis_type == 0:
         tt = np.linspace(args.max_T2 / args.label_dim, args.max_T2, args.label_dim)[np.newaxis, :]
         dd = np.linspace(args.max_D / args.label_dim, args.max_D, args.label_dim)[np.newaxis, :]
@@ -100,6 +104,8 @@ def gen_signal(args):
         dd = np.logspace(np.log10(args.floor_D), np.log10(args.max_D), args.label_dim)[np.newaxis, :]
     KD = np.exp(-np.dot(b[:, np.newaxis], 1 / dd))
     KT = np.exp(-np.dot(t[:, np.newaxis], 1 / tt))
+    # KD = np.exp(-np.dot(b, 1 / dd))
+    # KT = np.exp(-np.dot(t, 1 / tt))
     nDT = np.random.randint(1, args.num_component + 1, args.num_samples)
 
     for i in trange(args.num_samples):
@@ -172,13 +178,13 @@ if __name__ == '__main__':
     parser.add_argument('--floor_D', type=float, default=0, help='the floor value of diffusion coefficient')
     parser.add_argument('--min_sep_D', type=float, default=0.1, help='the min sep between two component')
     parser.add_argument('--sig_D', type=float, default=0.02, help='the width of peaks')
-    parser.add_argument('--max_b', type=float, default=3, help='the max value of b array')
+    parser.add_argument('--max_b', type=float, default=1.5, help='the max value of b array')
     # parameters for dimension 2
     parser.add_argument('--max_T2', type=float, default=1, help='the max value of T2')
     parser.add_argument('--floor_T2', type=float, default=0, help='the floor value of T2')
     parser.add_argument('--min_sep_T2', type=float, default=0.1, help='the min sep between two component')
     parser.add_argument('--sig_T2', type=float, default=0.02, help='the width of peaks')
-    parser.add_argument('--max_t', type=float, default=3, help='the max value of t array')
+    parser.add_argument('--max_t', type=float, default=1.5, help='the max value of t array')
     args = parser.parse_args()
 
     generate_dataset(args=args)

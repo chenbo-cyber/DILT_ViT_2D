@@ -6,41 +6,42 @@ import logging
 
 import torch
 import numpy as np
+import scipy.io as scio
 # import wandb
 import util
 import os
 import matplotlib.pyplot as plt
 
-import dataset
+import dataset_r as dataset
 from Module.SimpleViT import *
 from Module.ViT import *
 from Module.MAE import *
 from Module.EANet import *
 
-DEVICE = torch.device("cuda:0")
+# DEVICE = torch.device("cuda:0")
 logger = logging.getLogger(__name__)
 
 def set_module(args):
     """
     Create module
     """
+    DEVICE = torch.device(args.device)
+    # DEVICE = torch.device("cuda:0")
     net = None
-    b = np.linspace(0.03, 3, 100)[:, np.newaxis]
-    t = np.linspace(0.03, 3, 100)[:, np.newaxis]
+    b = np.linspace(0.015, 1.5, 100)[:, np.newaxis]
+    t = np.linspace(0.015, 1.5, 100)[:, np.newaxis]
+    # b = scio.loadmat('Dataset/T2-T2_mt50ms.mat')['t2values']
+    # t = scio.loadmat('Dataset/T2-T2_mt50ms.mat')['t2values']
     if args.module_type == 'EANet':
         net = EANet(n_classes=1, n_layers=50, stride=8, b_values=b, t_values=t, DEVICE=DEVICE)
     elif args.module_type == 'SimpleViT':
         net = SimpleViT(
                         image_size = args.image_size,
                         patch_size = args.patch_size,
-                        # image_size = 100,
-                        # patch_size = 10,
                         num_classes = 10000,
                         dim = 1024,
                         depth = args.n_layers,
                         heads = args.n_heads,
-                        # depth = 10,
-                        # heads = 10,
                         mlp_dim = 2048,
                         b_values=b, 
                         t_values=t, 
@@ -94,6 +95,8 @@ def train(args, module, optimizer, criterion, scheduler, train_loader, val_loade
     """
     Train the module for one epoch
     """
+    DEVICE = torch.device(args.device)
+    # DEVICE = torch.device("cuda:0")
     epoch_start_time = time.time()
     module.train()
     loss_train = 0
@@ -186,6 +189,7 @@ if __name__ == '__main__':
     parser.add_argument('--tag', type=str, default='', help='the tag for training model')
     parser.add_argument('--output_dir', type=str, default='./Experiments', help='output directory')
     parser.add_argument('--no_cuda', action='store_true', help="avoid using CUDA when available")
+    parser.add_argument('--device', type=str, default="cuda:0", help="GPU device number")
     # dataset parameters
     parser.add_argument('--batch_size', type=int, default=100, help='batch size used during training')
     #module parameters
@@ -236,7 +240,7 @@ if __name__ == '__main__':
     torch.cuda.manual_seed_all(args.torch_seed)
     torch.backends.cudnn.deterministic = True
 
-    train_loader, val_loader, test_loader = dataset.load_dataloader_exist(args.batch_size)
+    train_loader, val_loader, test_loader = dataset.load_dataloader_exist(args.batch_size, args.device)
 
     module = set_module(args)
     # optimizer = torch.optim.Adam(module.parameters(), lr=args.lr)
