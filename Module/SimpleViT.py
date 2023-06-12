@@ -80,7 +80,7 @@ class Transformer(nn.Module):
         return x
 
 class SimpleViT(nn.Module):
-    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, channels = 1, dim_head = 64, b_values, t_values, DEVICE):
+    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, channels = 3, dim_head = 64):
         super().__init__()
         image_height, image_width = pair(image_size)
         patch_height, patch_width = pair(patch_size)
@@ -107,20 +107,9 @@ class SimpleViT(nn.Module):
 
         self.relu = nn.ReLU()
 
-        tt = np.linspace(0.01, 1, 100)[np.newaxis, :]
-        dd = np.linspace(0.01, 1, 100)[np.newaxis, :]
-        # tt = np.logspace(np.log10(10**(-1)), np.log10(10**(0.1)), 100)[np.newaxis, :]
-        # dd = np.logspace(np.log10(10**(-1)), np.log10(10**(0.1)), 100)[np.newaxis, :]
-        KD = np.exp(-np.dot(b_values, 1 / dd))[np.newaxis, :, :]
-        KT = np.exp(-np.dot(t_values, 1 / tt))[np.newaxis, :, :]
-        self.tsz = np.shape(tt)[1]
-        self.dsz = np.shape(dd)[1]
-        self.KD = torch.from_numpy(np.float32(KD)).to(DEVICE)
-        self.KT = torch.from_numpy(np.float32(KT)).to(DEVICE)
-
     def forward(self, img):
         bsz = img.size(0)
-        img = img.unsqueeze(1)
+        # img = img.unsqueeze(1)
         # *_, h, w, dtype = *img.shape, img.dtype
 
         x = self.to_patch_embedding(img)
@@ -131,18 +120,8 @@ class SimpleViT(nn.Module):
         x = x.mean(dim = 1)
 
         x = self.to_latent(x)
-        out = self.linear_head(x).reshape(bsz, self.dsz, self.tsz)
+        out = self.linear_head(x).reshape(bsz, 100, 100)
         out = torch.abs(out)
-        # max_values= torch.sum(out.view(bsz, -1), dim=1)
-        # out = out / max_values
-        # out[out < 0.08 * max_values[:, None, None]]=0
 
-        reg_lambda = 0.025
-        KD = self.KD.repeat(bsz, 1, 1)
-        KT = self.KT.repeat(bsz, 1, 1)
-        X1 = torch.matmul(KD, out)
-        X = torch.matmul(X1, KT.permute(0, 2, 1))
-        X = X / X[:, 0, 0].reshape(bsz, 1, 1)
-
-        return X, out, reg_lambda
+        return out
         
