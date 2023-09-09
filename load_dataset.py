@@ -5,6 +5,25 @@ import numpy as np
 from scipy.interpolate import interp2d
 from torch.utils.data import Dataset
 
+def get_new_decay(decay_data, b, t, max_ending):
+    decay_dim = decay_data.shape[1]
+
+    max_row = np.max(decay_data, axis=1)
+    max_col = np.max(decay_data, axis=0)
+    row_position = np.where(max_row > max_ending)
+    col_position = np.where(max_col > max_ending)
+    new_b = b[row_position]
+    new_t = t[col_position]
+
+    new_t = np.linspace(np.min(new_t), np.max(new_t), decay_dim)
+    new_b = np.linspace(np.min(new_b), np.max(new_b), decay_dim)
+
+    interp_func = interp2d(t, b, decay_data, kind='cubic')
+    decay_data = interp_func(new_t, new_b)
+    decay_data = decay_data / decay_data[0, 0]
+
+    return decay_data, new_b, new_t
+
 class Laplace2DDataset(Dataset):
     def __init__(self, dataroot='./Laplace2D', split='train', max_b=2, max_t=2, max_D=1, max_T=1, max_ending=0.03):
         super(Laplace2DDataset, self).__init__()
@@ -22,7 +41,6 @@ class Laplace2DDataset(Dataset):
         self.range_D = np.linspace(self.max_D / self.label_dim, self.max_D, self.label_dim)
         self.range_T = np.linspace(self.max_T / self.label_dim, self.max_T, self.label_dim)
 
-
     def __getitem__(self, index):
         decay_data = self.decay_data[index]
         label_data = self.label_data[index]
@@ -38,21 +56,9 @@ class Laplace2DDataset(Dataset):
         b = self.b
         t = self.t
 
-        max_row = np.max(decay_data, axis=1)
-        max_col = np.max(decay_data, axis=0)
-        row_position = np.where(max_row > self.max_ending)
-        col_position = np.where(max_col > self.max_ending)
-        new_b = b[row_position]
-        new_t = t[col_position]
+        decay_data, new_b, new_t = get_new_decay(decay_data=decay_data, b=b, t=t, max_ending=self.max_ending)
 
-        new_t = np.linspace(np.min(new_t), np.max(new_t), self.decay_dim)
-        new_b = np.linspace(np.min(new_b), np.max(new_b), self.decay_dim)
-
-        interp_func = interp2d(t, b, decay_data, kind='cubic')
-        decay_data = interp_func(new_t, new_b)
-        decay_data = decay_data / decay_data[0, 0]
         decay_data = torch.from_numpy(decay_data.copy()).float()
-
         new_b = torch.from_numpy(new_b.copy()).float()
         new_t = torch.from_numpy(new_t.copy()).float()
         range_D = torch.from_numpy(self.range_D.copy()).float()
@@ -60,13 +66,14 @@ class Laplace2DDataset(Dataset):
         
         KD = torch.exp(-torch.matmul(new_b.unsqueeze(1), 1 / range_D.unsqueeze(0)))
         KT = torch.exp(-torch.matmul(new_t.unsqueeze(1), 1 / range_T.unsqueeze(0)))
-        # decay_data = torch.matmul(torch.matmul(KD, label_data), KT.permute(1, 0))
-        # decay_data = decay_data / decay_data[0, 0]
+        # KT = torch.exp(-torch.matmul(new_t.unsqueeze(1), 1 / range_T.unsqueeze(0))).permute(1, 0)
+        train_decay_data = torch.matmul(torch.matmul(KD, label_data), KT.permute(1, 0))
+        train_decay_data = train_decay_data / train_decay_data[0, 0]
 
         concat_data = torch.concat([KD.unsqueeze(0), decay_data.unsqueeze(0), KT.unsqueeze(0)])
 
         return (
-            {'decay_data': decay_data, 'concat_data': concat_data, 'label_data': label_data, 'b': new_b, 't': new_t,'Index': index}
+            {'decay_data': train_decay_data, 'concat_data': concat_data, 'label_data': label_data, 'b': new_b, 't': new_t, 'Index': index}
         )
 
     def __len__(self):
@@ -85,7 +92,7 @@ def create_dataset(args, phase):
     return dataset
 
 def create_dataloader(dataset, args, phase):
-    '''create dataloader '''
+    '''create dataloader'''
     if phase in ['train', 'valid']:
         return torch.utils.data.DataLoader(
             dataset,

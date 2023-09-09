@@ -6,10 +6,12 @@ import argparse
 from tqdm import trange
 from sklearn.model_selection import train_test_split as train_val
 
-def gaussian_blind_noise(S, dB):
+def gaussian_blind_noise(S, dB_min):
     """
     Add Gaussian noise to the input signal. The std of the gaussian noise is uniformly chosen between 0 and 1/sqrt(snr).
     """
+    # dB = np.random.uniform(dB_min, 45)
+    dB = dB_min
     snr = np.exp(np.log(10) * float(dB) / 10)
     num_samples, signal_dim, num_fre = np.shape(S)
     noise_S = np.zeros([num_samples, signal_dim, num_fre])
@@ -113,6 +115,7 @@ def gen_signal(args):
         T2 = np.zeros([1, args.num_component]).astype(float)
         signal = np.zeros([args.input_dim, args.input_dim]).astype(float)
         label1 = np.zeros([args.label_dim, args.label_dim]).astype(float)
+        label2 = np.zeros([args.label_dim, args.label_dim]).astype(float)
 
         if args.axis_type == 1:
             for j in np.arange(nDT[i]):
@@ -154,9 +157,11 @@ def gen_signal(args):
             amp = max(np.abs(np.random.rand()), args.floor_amp)
             # signal = signal + amp * np.dot(np.exp(-b[:, np.newaxis] * R1[0, j]), np.exp(-t[:, np.newaxis] * R[0, j]).T)
             label1 = label1 + amp * np.dot(label_D[j, :][:, np.newaxis], label_T2[j, :][np.newaxis, :])
+            # label2 = label2 + np.dot(label_D[j, :][:, np.newaxis], label_T2[j, :][np.newaxis, :])
         signal = np.matmul(np.matmul(KD, label1), KT.T)
         S[i] = signal / np.max(signal)
         label[i] = label1 / np.max(label1)
+        # label[i] = label2 / np.max(label2)
 
     SN = gaussian_blind_noise(S, args.dB)
 
@@ -167,11 +172,11 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', type=str, default='Dataset/', help='the path of output file')
     parser.add_argument('--num_samples', type=int, default=80000, help='the number of simulated data')
     parser.add_argument('--ratio', type=float, default=0.1, help='the ratio between training and validation')
-    parser.add_argument('--floor_amp', type=float, default=0.2, help='the floor amplitude of one component')
+    parser.add_argument('--floor_amp', type=float, default=0.5, help='the floor amplitude of one component')
     parser.add_argument('--input_dim', type=int, default=100, help='the dimension size of input')
     parser.add_argument('--label_dim', type=int, default=100, help='the dimension size of label')
     parser.add_argument('--num_component', type=int, default=5, help='the number of component')
-    parser.add_argument('--dB', type=int, default=48, help='the SNR of addition noise')
+    parser.add_argument('--dB', type=int, default=26, help='the SNR of addition noise')
     parser.add_argument('--axis_type', type=int, default=0, help='0: linspace, 1: logspace')
     # parameters for dimension 1
     parser.add_argument('--max_D', type=float, default=1, help='the max value of diffusion coefficient')

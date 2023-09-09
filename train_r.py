@@ -6,16 +6,18 @@ import logging
 
 import torch
 import numpy as np
-import scipy.io as scio
 import util
 import os
 import matplotlib.pyplot as plt
 
 import load_dataset
 from Module.SimpleViT import *
+from Module.DualSimpleViT import *
 from Module.ViT import *
 from Module.MAE import *
 from Module.EANet import *
+from Module.ViP import *
+from Module.DeepViT import *
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,7 @@ def set_module(args):
                         heads = args.n_heads,
                         mlp_dim = 2048
                     )
+
     else:
         raise NotImplementedError('Module type not implemented')
     if args.use_cuda:
@@ -57,7 +60,8 @@ def train(args, module, optimizer, criterion, scheduler, train_loader, val_loade
         optimizer.zero_grad()
 
         out_result = module(train_input)
-        out_decay= generate_decay(b=train_data['b'], t=train_data['t'], max_D=args.max_D, max_T=args.max_T, out=out_result, DEVICE=DEVICE)
+        # out_decay= generate_decay(b=train_data['b'], t=train_data['t'], max_D=args.max_D, max_T=args.max_T, out=out_result, DEVICE=DEVICE)
+        out_decay= generate_decay(concat_data=train_input, out=out_result)
 
         loss_label = criterion(train_label, out_result)
         loss_decay = criterion(train_data['decay_data'].to(DEVICE), out_decay)
@@ -82,7 +86,8 @@ def train(args, module, optimizer, criterion, scheduler, train_loader, val_loade
 
         with torch.no_grad():
             val_result = module(val_input)
-        val_decay = generate_decay(b=val_data['b'], t=val_data['t'], max_D=args.max_D, max_T=args.max_T, out=val_result, DEVICE=DEVICE)
+        # val_decay = generate_decay(b=val_data['b'], t=val_data['t'], max_D=args.max_D, max_T=args.max_T, out=val_result, DEVICE=DEVICE)
+        val_decay= generate_decay(concat_data=val_input, out=val_result)
         
         loss_label = criterion(val_label, val_result)
         loss_decay = criterion(val_data['decay_data'].to(DEVICE), val_decay)
@@ -141,37 +146,46 @@ def train(args, module, optimizer, criterion, scheduler, train_loader, val_loade
 
     return loss_train, loss_val
 
-def generate_decay(b, t, max_D, max_T, out, DEVICE):
-    b = b.to(DEVICE)
-    t = t.to(DEVICE)
-    bsz, input_dim = b.shape
+# def generate_decay(b, t, max_D, max_T, out, DEVICE):
+#     b = b.to(DEVICE)
+#     t = t.to(DEVICE)
+#     bsz, input_dim = b.shape
 
-    range_D = np.linspace(max_D / input_dim, max_D, input_dim)
-    range_T = np.linspace(max_T / input_dim, max_T, input_dim)
-    range_D = torch.from_numpy(range_D).float().to(DEVICE).repeat(bsz, 1)
-    range_T = torch.from_numpy(range_T).float().to(DEVICE).repeat(bsz, 1)
+#     range_D = np.linspace(max_D / input_dim, max_D, input_dim)
+#     range_T = np.linspace(max_T / input_dim, max_T, input_dim)
+#     range_D = torch.from_numpy(range_D).float().to(DEVICE).repeat(bsz, 1)
+#     range_T = torch.from_numpy(range_T).float().to(DEVICE).repeat(bsz, 1)
 
-    KD = torch.exp(-torch.matmul(b.unsqueeze(2), 1 / range_D.unsqueeze(1)))
-    KT = torch.exp(-torch.matmul(t.unsqueeze(2), 1 / range_T.unsqueeze(1)))
+#     KD = torch.exp(-torch.matmul(b.unsqueeze(2), 1 / range_D.unsqueeze(1)))
+#     KT = torch.exp(-torch.matmul(t.unsqueeze(2), 1 / range_T.unsqueeze(1)))
+
+#     X1 = torch.matmul(KD, out)
+#     X = torch.matmul(X1, KT.permute(0, 2, 1))
+#     X = X / X[:, 0, 0].reshape(bsz, 1, 1)
+    
+#     return X
+
+def generate_decay(concat_data, out):
+    KD = concat_data[:, 0, :, :]
+    KT = concat_data[:, 2, :, :]
 
     X1 = torch.matmul(KD, out)
     X = torch.matmul(X1, KT.permute(0, 2, 1))
-    X = X / X[:, 0, 0].reshape(bsz, 1, 1)
+    X = X / X[:, 0, 0].reshape(out.shape[0], 1, 1)
     
     return X
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-
     # basic parameters
     parser.add_argument('--tag', type=str, default='', help='the tag for training model')
     parser.add_argument('--output_dir', type=str, default='./Experiments', help='output directory')
     parser.add_argument('--no_cuda', action='store_true', help="avoid using CUDA when available")
-    parser.add_argument('--device', type=str, default="cuda:1", help="GPU device number")
+    parser.add_argument('--device', type=str, default="cuda:0", help="GPU device number")
     # dataset parameters
     parser.add_argument('--data_root', type=str, default='./Dataset', help='input data root')
-    parser.add_argument('--batch_size', type=int, default=100, help='batch size used during training')
+    parser.add_argument('--batch_size', type=int, default=50, help='batch size used during training')
     parser.add_argument('--max_t', type=float, default=5, help='the max value of t array')
     parser.add_argument('--max_b', type=float, default=5, help='the max value of b array')
     parser.add_argument('--max_ending', type=float, default=0.03, help='the max ending value')
@@ -184,7 +198,7 @@ if __name__ == '__main__':
     parser.add_argument('--patch_size', type=int, default=20, help='head number of multi-head attention in the module')
     parser.add_argument('--image_size', type=int, default=100, help='head number of multi-head attention in the module')
     # training parameters
-    parser.add_argument('--reg_lambda', type=float, default=0.1, help='the regularization parameter')
+    parser.add_argument('--reg_lambda', type=float, default=0.4, help='the regularization parameter')
     parser.add_argument('--n_training', type=int, default=80000*0.9, help='# of training data')
     parser.add_argument('--n_validation', type=int, default=80000*0.1, help='# of validation data')
     parser.add_argument('--lr', type=float, default=0.001,
