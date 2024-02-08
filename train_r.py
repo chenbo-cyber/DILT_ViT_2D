@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 
 import load_dataset
 from Module.SimpleViT import *
+import Module.SimpleViTwithDropout as BViT
 from Module.DualSimpleViT import *
 from Module.ViT import *
 from Module.MAE import *
@@ -37,7 +38,6 @@ def set_module(args):
                         heads = args.n_heads,
                         mlp_dim = 2048
                     )
-
     else:
         raise NotImplementedError('Module type not implemented')
     if args.use_cuda:
@@ -146,25 +146,6 @@ def train(args, module, optimizer, criterion, scheduler, train_loader, val_loade
 
     return loss_train, loss_val
 
-# def generate_decay(b, t, max_D, max_T, out, DEVICE):
-#     b = b.to(DEVICE)
-#     t = t.to(DEVICE)
-#     bsz, input_dim = b.shape
-
-#     range_D = np.linspace(max_D / input_dim, max_D, input_dim)
-#     range_T = np.linspace(max_T / input_dim, max_T, input_dim)
-#     range_D = torch.from_numpy(range_D).float().to(DEVICE).repeat(bsz, 1)
-#     range_T = torch.from_numpy(range_T).float().to(DEVICE).repeat(bsz, 1)
-
-#     KD = torch.exp(-torch.matmul(b.unsqueeze(2), 1 / range_D.unsqueeze(1)))
-#     KT = torch.exp(-torch.matmul(t.unsqueeze(2), 1 / range_T.unsqueeze(1)))
-
-#     X1 = torch.matmul(KD, out)
-#     X = torch.matmul(X1, KT.permute(0, 2, 1))
-#     X = X / X[:, 0, 0].reshape(bsz, 1, 1)
-    
-#     return X
-
 def generate_decay(concat_data, out):
     KD = concat_data[:, 0, :, :]
     KT = concat_data[:, 2, :, :]
@@ -182,7 +163,7 @@ if __name__ == '__main__':
     parser.add_argument('--tag', type=str, default='', help='the tag for training model')
     parser.add_argument('--output_dir', type=str, default='./Experiments', help='output directory')
     parser.add_argument('--no_cuda', action='store_true', help="avoid using CUDA when available")
-    parser.add_argument('--device', type=str, default="cuda:0", help="GPU device number")
+    parser.add_argument('--device', type=str, default="cuda:1", help="GPU device number")
     # dataset parameters
     parser.add_argument('--data_root', type=str, default='./Dataset', help='input data root')
     parser.add_argument('--batch_size', type=int, default=50, help='batch size used during training')
@@ -191,21 +172,22 @@ if __name__ == '__main__':
     parser.add_argument('--max_ending', type=float, default=0.03, help='the max ending value')
     parser.add_argument('--max_D', type=float, default=1, help='the max value of diffusion coefficient')
     parser.add_argument('--max_T', type=float, default=1, help='the max value of T2')
-    #module parameters
+    parser.add_argument('--axis_type', type=int, default=1, help='0: linspace, 1: logspace')
+    # module parameters
     parser.add_argument('--module_type', type=str, default='SimpleViT', help='type of the module')
     parser.add_argument('--n_layers', type=int, default=10, help='number of feed forward layers in the module')
     parser.add_argument('--n_heads', type=int, default=10, help='head number of multi-head attention in the module')
     parser.add_argument('--patch_size', type=int, default=20, help='head number of multi-head attention in the module')
     parser.add_argument('--image_size', type=int, default=100, help='head number of multi-head attention in the module')
     # training parameters
-    parser.add_argument('--reg_lambda', type=float, default=0.4, help='the regularization parameter')
+    parser.add_argument('--reg_lambda', type=float, default=0.6, help='the regularization parameter')
     parser.add_argument('--n_training', type=int, default=80000*0.9, help='# of training data')
     parser.add_argument('--n_validation', type=int, default=80000*0.1, help='# of validation data')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='initial learning rate for adam optimizer used for the module')
     parser.add_argument('--n_epochs', type=int, default=300, help='number of epochs used to train the module')
-    parser.add_argument('--save_epoch', type=int, default=5, help='saving checkpoints at the end of epochs')
-    parser.add_argument('--test_epoch', type=int, default=5, help='test result at the end of epochs')
+    parser.add_argument('--save_epoch', type=int, default=10, help='saving checkpoints at the end of epochs')
+    parser.add_argument('--test_epoch', type=int, default=10, help='test result at the end of epochs')
     parser.add_argument('--numpy_seed', type=int, default=100)
     parser.add_argument('--torch_seed', type=int, default=76)
 
@@ -249,7 +231,7 @@ if __name__ == '__main__':
     logger.info('Initial Dataset Finished')
 
     module = set_module(args)
-    # checkpoint = torch.load('Experiments/SimpleViT_230610_132532/checkpoints/epoch_245.pth')
+    # checkpoint = torch.load('Experiments/SimpleViTwithDropout_230909_211308/checkpoints/epoch_300.pth')
     # module.load_state_dict(checkpoint['model'])
     # optimizer = torch.optim.Adam(module.parameters(), lr=args.lr)
     optimizer = torch.optim.RMSprop(module.parameters(), lr=args.lr, alpha=0.9)

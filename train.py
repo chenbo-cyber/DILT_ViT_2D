@@ -12,7 +12,7 @@ import util
 import os
 import matplotlib.pyplot as plt
 
-import dataset_r as dataset
+import generate_dataset as dataset
 from Module.SimpleViT import *
 from Module.ViT import *
 from Module.MAE import *
@@ -109,8 +109,8 @@ def train(args, module, optimizer, criterion, scheduler, train_loader, val_loade
 
         loss_label = criterion(train_label, out_result)
         loss_decay = criterion(train_input, out_input)
-        loss = args.reg_lambda * loss_label + loss_decay
-        # loss = loss_label
+        # loss = args.reg_lambda * loss_label + loss_decay
+        loss = loss_label
         loss.backward()
         optimizer.step()
         loss_train += loss.data.item()
@@ -129,8 +129,8 @@ def train(args, module, optimizer, criterion, scheduler, train_loader, val_loade
             # val_lambda = val_lambda.to(DEVICE)
         loss_label = criterion(val_label, val_result)
         loss_decay = criterion(val_out, val_input)
-        loss = args.reg_lambda * loss_label + loss_decay
-        # loss = loss_label
+        # loss = args.reg_lambda * loss_label + loss_decay
+        loss = loss_label
 
         loss_val += loss.data.item()
         loss_val_decay += loss_decay.data.item()

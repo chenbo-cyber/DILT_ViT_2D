@@ -11,15 +11,19 @@ def gaussian_blind_noise(S, dB_min):
     Add Gaussian noise to the input signal. The std of the gaussian noise is uniformly chosen between 0 and 1/sqrt(snr).
     """
     # dB = np.random.uniform(dB_min, 45)
-    dB = dB_min
-    snr = np.exp(np.log(10) * float(dB) / 10)
+    # dB = dB_min
+    # snr = np.exp(np.log(10) * float(dB) / 10)
     num_samples, signal_dim, num_fre = np.shape(S)
     noise_S = np.zeros([num_samples, signal_dim, num_fre])
     # sigma_max = np.sqrt(1. / snr)
     # sigmas = sigma_max * np.random.rand(num_samples)
-    sigma = np.sqrt(1. / snr)
 
     for i in np.arange(num_samples):
+        # dB = np.random.uniform(dB_min, 45)
+        dB = dB_min
+        snr = np.exp(np.log(10) * float(dB) / 10)
+        sigma = np.sqrt(1. / snr)
+
         noise = np.random.randn(signal_dim, num_fre) * S[i, :, :]
         # mult = sigmas[i] * np.linalg.norm(s, 2) / (np.linalg.norm(noise, 2))
         mult = sigma * np.linalg.norm(S[i, :, :], ord='fro') / (np.linalg.norm(noise, ord='fro'))
@@ -105,6 +109,7 @@ def gen_signal(args):
         tt = np.logspace(np.log10(args.floor_T2), np.log10(args.max_T2), args.label_dim)[np.newaxis, :]
         dd = np.logspace(np.log10(args.floor_D), np.log10(args.max_D), args.label_dim)[np.newaxis, :]
     KD = np.exp(-np.dot(b[:, np.newaxis], 1 / dd))
+    # KD = np.exp(-np.dot(b[:, np.newaxis], dd))
     KT = np.exp(-np.dot(t[:, np.newaxis], 1 / tt))
     # KD = np.exp(-np.dot(b, 1 / dd))
     # KT = np.exp(-np.dot(t, 1 / tt))
@@ -172,21 +177,21 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', type=str, default='Dataset/', help='the path of output file')
     parser.add_argument('--num_samples', type=int, default=80000, help='the number of simulated data')
     parser.add_argument('--ratio', type=float, default=0.1, help='the ratio between training and validation')
-    parser.add_argument('--floor_amp', type=float, default=0.5, help='the floor amplitude of one component')
+    parser.add_argument('--floor_amp', type=float, default=0.2, help='the floor amplitude of one component')
     parser.add_argument('--input_dim', type=int, default=100, help='the dimension size of input')
     parser.add_argument('--label_dim', type=int, default=100, help='the dimension size of label')
     parser.add_argument('--num_component', type=int, default=5, help='the number of component')
-    parser.add_argument('--dB', type=int, default=26, help='the SNR of addition noise')
-    parser.add_argument('--axis_type', type=int, default=0, help='0: linspace, 1: logspace')
+    parser.add_argument('--dB', type=int, default=48, help='the SNR of addition noise')
+    parser.add_argument('--axis_type', type=int, default=1, help='0: linspace, 1: logspace')
     # parameters for dimension 1
-    parser.add_argument('--max_D', type=float, default=1, help='the max value of diffusion coefficient')
-    parser.add_argument('--floor_D', type=float, default=0, help='the floor value of diffusion coefficient')
+    parser.add_argument('--max_D', type=float, default=10**(0), help='the max value of diffusion coefficient')
+    parser.add_argument('--floor_D', type=float, default=10**(-1), help='the floor value of diffusion coefficient')
     parser.add_argument('--min_sep_D', type=float, default=0.1, help='the min sep between two component')
     parser.add_argument('--sig_D', type=float, default=0.02, help='the width of peaks')
     parser.add_argument('--max_b', type=float, default=5, help='the max value of b array')
     # parameters for dimension 2
-    parser.add_argument('--max_T2', type=float, default=1, help='the max value of T2')
-    parser.add_argument('--floor_T2', type=float, default=0, help='the floor value of T2')
+    parser.add_argument('--max_T2', type=float, default=10**(0), help='the max value of T2')
+    parser.add_argument('--floor_T2', type=float, default=10**(-1), help='the floor value of T2')
     parser.add_argument('--min_sep_T2', type=float, default=0.1, help='the min sep between two component')
     parser.add_argument('--sig_T2', type=float, default=0.02, help='the width of peaks')
     parser.add_argument('--max_t', type=float, default=5, help='the max value of t array')

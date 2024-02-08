@@ -25,7 +25,7 @@ def get_new_decay(decay_data, b, t, max_ending):
     return decay_data, new_b, new_t
 
 class Laplace2DDataset(Dataset):
-    def __init__(self, dataroot='./Laplace2D', split='train', max_b=2, max_t=2, max_D=1, max_T=1, max_ending=0.03):
+    def __init__(self, dataroot='./Laplace2D', split='train', max_b=5, max_t=5, max_D=10, max_T=1, max_ending=0.03):
         super(Laplace2DDataset, self).__init__()
         self.split = split
         self.max_ending = max_ending
@@ -38,8 +38,10 @@ class Laplace2DDataset(Dataset):
         self.label_dim = self.label_data.shape[1]
         self.b = np.linspace(max_b / self.decay_data.shape[1], max_b, self.decay_data.shape[1])
         self.t = np.linspace(max_t / self.decay_data.shape[2], max_t, self.decay_data.shape[2])
-        self.range_D = np.linspace(self.max_D / self.label_dim, self.max_D, self.label_dim)
-        self.range_T = np.linspace(self.max_T / self.label_dim, self.max_T, self.label_dim)
+        # self.range_D = np.linspace(self.max_D / self.label_dim, self.max_D, self.label_dim)
+        # self.range_T = np.linspace(self.max_T / self.label_dim, self.max_T, self.label_dim)
+        self.range_T = np.logspace(-1, 0, self.label_dim)
+        self.range_D = np.logspace(-1, 0, self.label_dim)
 
     def __getitem__(self, index):
         decay_data = self.decay_data[index]
@@ -65,8 +67,8 @@ class Laplace2DDataset(Dataset):
         range_T = torch.from_numpy(self.range_T.copy()).float()
         
         KD = torch.exp(-torch.matmul(new_b.unsqueeze(1), 1 / range_D.unsqueeze(0)))
+        # KD = torch.exp(-torch.matmul(new_b.unsqueeze(1), range_D.unsqueeze(0)))
         KT = torch.exp(-torch.matmul(new_t.unsqueeze(1), 1 / range_T.unsqueeze(0)))
-        # KT = torch.exp(-torch.matmul(new_t.unsqueeze(1), 1 / range_T.unsqueeze(0))).permute(1, 0)
         train_decay_data = torch.matmul(torch.matmul(KD, label_data), KT.permute(1, 0))
         train_decay_data = train_decay_data / train_decay_data[0, 0]
 
